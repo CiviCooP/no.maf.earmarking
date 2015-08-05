@@ -123,16 +123,26 @@ function earmarking_civicrm_alterSettingsFolders(&$metaDataFolders = NULL) {
 }
 
 /**
- * Functions below this ship commented out. Uncomment as required.
+ * Implementation of hook civicrm_pageRun to add element for mearmarking of recurring (BOS1506294)
  *
-
-/**
- * Implements hook_civicrm_preProcess().
- *
- * @link http://wiki.civicrm.org/confluence/display/CRMDOC/hook_civicrm_preProcess
- *
-function earmarking_civicrm_preProcess($formName, &$form) {
-
+ * @param object $page
+ */
+function earmarking_civicrm_pageRun(&$page) {
+  $pageName = $page->getVar('_name');
+  if ($pageName == 'CRM_Contact_Page_View_Summary') {
+    $contactId = $page->getVar('_contactId');
+    $page->assign('earmarking', CRM_Earmarking_SummaryEarmarking::getEarmarking($contactId));
+  }
 }
 
-*/
+/**
+ * Implementation of hook civicrm_summary to add count main activities for expert (issue 1608)
+ *
+ * @param $contactId
+ * @param $content
+ */
+function earmarking_civicrm_summary($contactId, &$content) {
+  if (CRM_Earmarking_SummaryEarmarking::hasActiveRecurring($contactId) == TRUE) {
+    CRM_Core_Region::instance('page-body')->add(array('template' => 'SummaryEarmarking.tpl'));
+  }
+}
