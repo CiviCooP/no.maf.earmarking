@@ -166,7 +166,7 @@ WHERE recur.contact_id = %2';
     $query = 'SELECT COUNT(*) AS countNets FROM '.$netsTransactionsTable['table_name'].' WHERE entity_id = %1';
     $params = array(1 =>array($contributionId, 'Integer'));
     $dao = CRM_Core_DAO::executeQuery($query, $params);
-    if ($dao->countNets > 0) {
+    if ($dao->fetch() && $dao->countNets > 0) {
       return TRUE;
     } else {
       return FALSE;
