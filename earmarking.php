@@ -131,7 +131,7 @@ function earmarking_civicrm_pageRun(&$page) {
   $pageName = $page->getVar('_name');
   if ($pageName == 'CRM_Contact_Page_View_Summary') {
     $contactId = $page->getVar('_contactId');
-    $page->assign('earmarking', CRM_Earmarking_SummaryEarmarking::getEarmarking($contactId));
+    $page->assign('earmarking', CRM_Earmarking_Earmarking::getRecurringEarmarkingForContact($contactId));
   }
 }
 
@@ -142,7 +142,29 @@ function earmarking_civicrm_pageRun(&$page) {
  * @param $content
  */
 function earmarking_civicrm_summary($contactId, &$content) {
-  if (CRM_Earmarking_SummaryEarmarking::hasActiveRecurring($contactId) == TRUE) {
+  if (CRM_Earmarking_Earmarking::hasActiveRecurring($contactId) == TRUE) {
     CRM_Core_Region::instance('page-body')->add(array('template' => 'SummaryEarmarking.tpl'));
+  }
+}
+
+/**
+ * Implementation of hook civicrm_post to add default earmarking to new contributions
+ *
+ * @param string $op
+ * @param string $objectName
+ * @param int $objectId
+ * @param object $objectRef
+ */
+function earmarking_civicrm_post($op, $objectName, $objectId, &$objectRef) {
+  /*
+   * BOS1506293 if contribution created from recurring, default to earmarking of recurring
+   */
+  if ($objectName == 'Contribution' && $op == 'create') {
+    if (!empty($objectRef->contribution_recur_id)) {
+      $earmarkingId = CRM_Earmarking_Earmarking::getRecurringEarmarking($objectRef->contribution_recur_id);
+      if ($earmarkingId) {
+        CRM_Earmarking_Earmarking::addContributionEarmark($objectId, $earmarkingId);
+      }
+    }
   }
 }
