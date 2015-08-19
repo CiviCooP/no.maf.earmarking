@@ -104,7 +104,7 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
     return "
 FROM civicrm_contribution_recur_offline off
 JOIN civicrm_contribution_recur recur ON off.recur_id = recur.id
-LEFT JOIN civicrm_contribution contr ON off.recur_id = contr.contribution_recur_id
+JOIN civicrm_contribution contr ON off.recur_id = contr.contribution_recur_id
 LEFT JOIN ".$transactionTable['table_name']." nets ON contr.id = nets.entity_id
 LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
   }
@@ -138,10 +138,21 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
       $params[$count] = array($this->_formValues['payment_type_id'], 'Integer');
     }
 
+    if (!empty($this->_formValues['start_date'])) {
+      $count++;
+      $clause[] = "contr.receive_date >= %".$count;
+      $params[$count] = array(date('Ymd', strtotime($this->_formValues['start_date'])), 'Date');
+    }
+
+    if (!empty($this->_formValues['end_date'])) {
+      $count++;
+      $clause[] = "contr.receive_date <= %".$count;
+      $params[$count] = array(date('Ymd', strtotime($this->_formValues['end_date'])), 'Date');
+    }
+
     if (!empty($clause)) {
       $where = implode(' AND ', $clause);
     }
-
     return $this->whereClause($where, $params);
   }
 
@@ -163,10 +174,10 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
    */
   function alterRow(&$row) {
     $row['earmarking'] = CRM_Earmarking_Earmarking::getRecurringEarmarkingForContact($row['contact_id']);
-    $recurringContributionsContact = $this->getSelectedContributionsForContact($row['contact_id']);
-    $row['payment_types'] = $this->getPaymentTermsForContact($recurringContributionsContact);
-    $row['contribution_count'] = count($recurringContributionsContact);
-    $row['donor_amount'] = $this->getContactDonorAmount($recurringContributionsContact);
+    //$recurringContributionsContact = $this->getSelectedContributionsForContact($row['contact_id']);
+    //$row['payment_types'] = $this->getPaymentTermsForContact($recurringContributionsContact);
+    //$row['contribution_count'] = count($recurringContributionsContact);
+    //$row['donor_amount'] = $this->getContactDonorAmount($recurringContributionsContact);
   }
 
   /**
@@ -185,16 +196,16 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
      * first selected recurring contributions according to selections
      */
     $recurs = $this->getSelectedRecurringContributionsForContact($contactId);
-    foreach ($recurs as $recur) {
+    foreach ($recurs as $recurId) {
       $paramsCount = 1;
       $where = array();
-      $params[1] = array($recur['recur_id'], 'Integer');
+      $params[1] = array($recurId, 'Integer');
 
       if (!empty($this->_formValues['status_id'])) {
         $where[] = 'contribution_status_id = %'.$paramsCount;
         $params[$paramsCount] = array($this->_formValues['status_id']);
       }
-      $query = 'SELECT contribution_recur_id, total_amount FROM civicrm_contribution WHERE contribution_recur_id = %1 AND '
+      $query = 'SELECT contribution_recur_id, total_amount, receive_date FROM civicrm_contribution WHERE contribution_recur_id = %1 AND '
         .implode(' AND ', $where);
       $dao = CRM_Core_DAO::executeQuery($query, $params);
       while ($dao->fetch()) {
@@ -203,7 +214,6 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
         $contribution['total_amount'] = $dao->total_amount;
         $recurringContributionsContact[] = $contribution;
       }
-      // TODO : test period
     }
     return $recurringContributionsContact;
   }
@@ -218,15 +228,28 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
   private function getSelectedRecurringContributionsForContact($contactId) {
     $recurs = array();
     if (!empty($contactId)) {
+      $where = array();
       $paramsCount = 2;
       $params = array(
         1 => array(0, 'Integer'),
         2 => array($contactId, 'Integer'));
-
-      $where = array();
-
+      $where[] = 'recur.is_test = %1';
+      $where[] = 'recur.contact_id = %2';
       if (!empty($this->_formValues['earmarking_id'])) {
-        $where[] = 'earmarking_id = %'.$paramsCount;
+        $paramsCount++;
+        $params[$paramsCount] = array($this->_formValues['earmarking_id'], 'Integer');
+        $where[] = 'off.earmarking_id = %'.$paramsCount;
+      }
+      if (!empty($this->_formValues['payment_type_id'])) {
+        $paramsCount++;
+        $params[$paramsCount] = array($this->_formValues['payment_type_id'], 'Integer');
+        $where[] = 'off.payment_type_id = %'.$paramsCount;
+      }
+      $query = "SELECT recur.id AS recurId
+FROM civicrm_contribution_recur recur JOIN civicrm_contribution_recur_offline off ON recur.id = off.recur_id WHERE ".implode(" AND ", $where);
+      $dao = CRM_Core_DAO::executeQuery($query, $params);
+      while ($dao->fetch()) {
+       $recurs[] = $dao->recurId;
       }
     }
     return $recurs;
