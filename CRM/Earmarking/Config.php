@@ -12,6 +12,8 @@ class CRM_Earmarking_Config {
 
   protected $resourcesPath = null;
   protected $translatedStrings = array();
+  protected $paymentTypeOptionGroup = array();
+  protected $earmarkingOptionGroup = array();
 
   /**
    * Constructor method
@@ -21,7 +23,31 @@ class CRM_Earmarking_Config {
   function __construct($context) {
     $settings = civicrm_api3('Setting', 'Getsingle', array());
     $this->resourcesPath = $settings['extensionsDir'].'/no.maf.postnummer/resources/';
+    $this->paymentTypeOptionGroup = $this->setOptionGroup('recurring_payment_type');
+    $this->earmarkingOptionGroup = $this->setOptionGroup('earmarking');
     $this->setTranslationFile();
+  }
+
+  /**
+   * Method to get the option group for recurring payment type
+   *
+   * @param string $key
+   * @return mixed
+   * @access public
+   */
+  public function getPaymentTypeOptionGroup($key = 'id') {
+    return $this->paymentTypeOptionGroup[$key];
+  }
+
+  /**
+   * Method to get the option group for earmarking
+   *
+   * @param string $key
+   * @return mixed
+   * @access public
+   */
+  public function getEarmarkingOptionGroup($key = 'id') {
+    return $this->earmarkingOptionGroup[$key];
   }
 
   /**
@@ -62,15 +88,36 @@ class CRM_Earmarking_Config {
    *
    * @access protected
    */
-  protected function setTranslationFile() {
+  protected function setTranslationFile()
+  {
     $config = CRM_Core_Config::singleton();
-    $jsonFile = $this->resourcesPath.$config->lcMessages.'_translate.json';
+    $jsonFile = $this->resourcesPath . $config->lcMessages . '_translate.json';
     if (file_exists($jsonFile)) {
       $translateJson = file_get_contents($jsonFile);
       $this->translatedStrings = json_decode($translateJson, true);
 
     } else {
       $this->translatedStrings = array();
+    }
+  }
+
+    /**
+     * Function to get option groups
+     *
+     * @param $optionGroupName
+     * @return array|bool
+     * @throws Exception
+     */
+  protected function setOptionGroup($optionGroupName) {
+    if (method_exists('CRM_Costinvoicelink_Utils', 'getOptionGroup')) {
+      return CRM_Costinvoicelink_Utils::getOptionGroup($optionGroupName);
+    } else {
+      try {
+        return civicrm_api3('OptionGroup', 'Getsingle', array('name' => $optionGroupName));
+      } catch (CiviCRM_API3_Exception $ex) {
+        throw new Exception("Could not find a single option group with name ".$optionGroupName.", meaning there might be none or more.
+        Error from API OptionGroup Getsingle: ".$ex->getMessage());
+      }
     }
   }
 }

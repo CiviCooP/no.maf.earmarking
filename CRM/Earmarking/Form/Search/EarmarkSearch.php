@@ -53,8 +53,7 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
       ts('Name') => 'display_name',
       $config->translate('Earmarking(s)') => 'earmarking',
       $config->translate('Payment Type(s)') => 'payment_type',
-      $config->translate('No of Contributions') => 'contribution_count',
-      ts('Total Amount') => 'donor_amount'
+      $config->translate('No of Active Recurring Contr.') => 'contribution_count'
     );
     return $columns;
   }
@@ -91,7 +90,7 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
    */
   function select() {
     return "DISTINCT(contr.contact_id), contact.contact_type, contact.display_name, '' AS contribution_count,
-    '' AS earmarking, '' AS payment_type, '' AS donor_amount ";
+    '' AS earmarking, '' AS payment_type ";
   }
 
   /**
@@ -174,96 +173,71 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
    */
   function alterRow(&$row) {
     $row['earmarking'] = CRM_Earmarking_Earmarking::getRecurringEarmarkingForContact($row['contact_id']);
-    //$recurringContributionsContact = $this->getSelectedContributionsForContact($row['contact_id']);
-    //$row['payment_types'] = $this->getPaymentTermsForContact($recurringContributionsContact);
-    //$row['contribution_count'] = count($recurringContributionsContact);
-    //$row['donor_amount'] = $this->getContactDonorAmount($recurringContributionsContact);
+    $row['contribution_count'] = $this->getRecurringCountForContact($row['contact_id']);
+    $row['payment_type'] = $this->getPaymentTypesForContact($row['contact_id']);
   }
 
-  /**
-   * Method to get records from civicrm_contributions_recur and related contributions for contact
-   *
-   * @param int $contactId
-   * @returns bool|array
-   * @access private
-   */
-  private function getSelectedContributionsForContact($contactId) {
-    if (empty($contactId)) {
-      return FALSE;
-    }
-    $recurringContributionsContact = array();
-    /*
-     * first selected recurring contributions according to selections
-     */
-    $recurs = $this->getSelectedRecurringContributionsForContact($contactId);
-    foreach ($recurs as $recurId) {
-      $paramsCount = 1;
-      $where = array();
-      $params[1] = array($recurId, 'Integer');
+  private function getRecurringCountForContact($contactId) {
+    $contributionCount = 0;
+    $where = array();
+    $where[] = "is_test = %1";
+    $where[] = "contact_id = %2";
+    $params = array(
+      1 => array(0, 'Integer'),
+      2 => array($contactId, 'Integer'));
+    $count = 2;
 
-      if (!empty($this->_formValues['status_id'])) {
-        $where[] = 'contribution_status_id = %'.$paramsCount;
-        $params[$paramsCount] = array($this->_formValues['status_id']);
-      }
-      $query = 'SELECT contribution_recur_id, total_amount, receive_date FROM civicrm_contribution WHERE contribution_recur_id = %1 AND '
-        .implode(' AND ', $where);
-      $dao = CRM_Core_DAO::executeQuery($query, $params);
-      while ($dao->fetch()) {
-        $contribution = array();
-        $contribution['recur_id'] = $dao->contribution_recur_id;
-        $contribution['total_amount'] = $dao->total_amount;
-        $recurringContributionsContact[] = $contribution;
-      }
+    if (!empty($this->_formValues['earmarking_id'])) {
+      $count++;
+      $where[] = "earmarking_id = %".$count;
+      $params[$count] = array($this->_formValues['earmarking_id'], 'Integer');
     }
-    return $recurringContributionsContact;
+
+    if (!empty($this->_formValues['payment_type_id'])) {
+      $count++;
+      $where[] = "payment_type_id = %".$count;
+      $params[$count] = array($this->_formValues['payment_type_id'], 'Integer');
+    }
+
+    if (!empty($this->_formValues['start_date'])) {
+      $count++;
+      $where[] = "start_date <= %".$count;
+      $params[$count] = array(date('Ymd', strtotime($this->_formValues['start_date'])), 'Date');
+    }
+
+    if (!empty($this->_formValues['end_date'])) {
+      $count++;
+      $where[] = "(end_date < %".$count." OR end_date IS NULL)";
+      $params[$count] = array(date('Ymd', strtotime($this->_formValues['end_date'])), 'Date');
+    }
+    $query = "SELECT COUNT(*)
+FROM civicrm_contribution_recur JOIN civicrm_contribution_recur_offline ON id = recur_id WHERE ".implode(" AND ", $where);
+    return CRM_COre_DAO::singleValueQuery($query, $params);
   }
-
-  /**
-   * Method to get active recurring contributions for contact that meet selection criteria
-   *
-   * @param int $contactId
-   * @return array $recurs
-   * @access public
-   */
-  private function getSelectedRecurringContributionsForContact($contactId) {
-    $recurs = array();
-    if (!empty($contactId)) {
-      $where = array();
-      $paramsCount = 2;
-      $params = array(
-        1 => array(0, 'Integer'),
-        2 => array($contactId, 'Integer'));
-      $where[] = 'recur.is_test = %1';
-      $where[] = 'recur.contact_id = %2';
-      if (!empty($this->_formValues['earmarking_id'])) {
-        $paramsCount++;
-        $params[$paramsCount] = array($this->_formValues['earmarking_id'], 'Integer');
-        $where[] = 'off.earmarking_id = %'.$paramsCount;
-      }
-      if (!empty($this->_formValues['payment_type_id'])) {
-        $paramsCount++;
-        $params[$paramsCount] = array($this->_formValues['payment_type_id'], 'Integer');
-        $where[] = 'off.payment_type_id = %'.$paramsCount;
-      }
-      $query = "SELECT recur.id AS recurId
-FROM civicrm_contribution_recur recur JOIN civicrm_contribution_recur_offline off ON recur.id = off.recur_id WHERE ".implode(" AND ", $where);
-      $dao = CRM_Core_DAO::executeQuery($query, $params);
-      while ($dao->fetch()) {
-       $recurs[] = $dao->recurId;
-      }
-    }
-    return $recurs;
-  }
-
   /**
    * Method to get payment terms for contact, retrieved from selected recurring contributions
    *
-   * @param array $recurringContributions for contact
-   * @return string $paymentTerms
+   * @param int $contactId
+   * @return string $paymentTypes
    * @access public
    */
-  public function getPaymentTermsForContact($recurringContributions) {
-    // TODO : implement
+  public function getPaymentTypesForContact($contactId) {
+    $paymentTypes = array();
+    $config = CRM_Earmarking_Config::singleton();
+    $query = "SELECT DISTINCT(opt.label) as paymentType
+FROM civicrm_contribution_recur recur
+JOIN civicrm_contribution_recur_offline off ON recur.id = off.recur_id
+JOIN civicrm_option_value opt ON off.payment_type_id = opt.value AND option_group_id = %1
+WHERE contact_id = %2";
+    $params = array(
+      1 => array($config->getPaymentTypeOptionGroup(), 'Integer'),
+      2 => array($contactId, 'Integer'));
+
+    $dao = CRM_Core_DAO::executeQuery($query, $params);
+    while ($dao->fetch()) {
+      $paymentTypes[] = $dao->paymentType;
+    }
+    return implode("; ", $paymentTypes);
   }
 
   /**
@@ -289,24 +263,20 @@ FROM civicrm_contribution_recur recur JOIN civicrm_contribution_recur_offline of
    */
   private function getPaymentTypeList() {
     $paymentTypeList = array();
-    if (method_exists('CRM_Costinvoicelink_Utils', 'getOptionGroup')) {
-      $paymentTypeOptionGroup = CRM_Costinvoicelink_Utils::getOptionGroup('recurring_payment_type');
-      $params = array(
-        'option_group_id' => $paymentTypeOptionGroup['id']);
-      try {
-        $optionValues = civicrm_api3('OptionValue', 'Get', $params);
-        foreach($optionValues['values'] as $optionValue) {
-          $paymentTypeList[$optionValue['value']] = $optionValue['label'];
-        }
-        $paymentTypeList[0] = '- select -';
-        asort($paymentTypeList);
-        return $paymentTypeList;
-      } catch (CiviCRM_API3_Exception $ex) {
-        $paymentTypeList[0] = '- select -';
-        return $paymentTypeList;
+    $config = CRM_Earmarking_Config::singleton();
+    $params = array(
+      'option_group_id' => $config->getPaymentTypeOptionGroup());
+    try {
+      $optionValues = civicrm_api3('OptionValue', 'Get', $params);
+      foreach($optionValues['values'] as $optionValue) {
+        $paymentTypeList[$optionValue['value']] = $optionValue['label'];
       }
-    } else {
-      throw new Exception('Could not find extension Costinvoicelink, check your CiviCRM support team (not found method getOptionGroup)');
+      $paymentTypeList[0] = '- select -';
+      asort($paymentTypeList);
+      return $paymentTypeList;
+    } catch (CiviCRM_API3_Exception $ex) {
+      $paymentTypeList[0] = '- select -';
+      return $paymentTypeList;
     }
   }
 
@@ -320,24 +290,20 @@ FROM civicrm_contribution_recur recur JOIN civicrm_contribution_recur_offline of
    */
   private function getEarmarkingList() {
     $earmarkingList = array();
-    if (method_exists('CRM_Costinvoicelink_Utils', 'getOptionGroup')) {
-      $earmarkingOptionGroup = CRM_Costinvoicelink_Utils::getOptionGroup('earmarking');
-      $params = array(
-        'option_group_id' => $earmarkingOptionGroup['id']);
-      try {
-        $optionValues = civicrm_api3('OptionValue', 'Get', $params);
-        foreach($optionValues['values'] as $optionValue) {
-          $earmarkingList[$optionValue['value']] = $optionValue['label'];
-        }
-        $earmarkingList[0] = '- select -';
-        asort($earmarkingList);
-        return $earmarkingList;
-      } catch (CiviCRM_API3_Exception $ex) {
-        $earmarkingList[0] = '- select -';
-        return $earmarkingList;
+    $config = CRM_Earmarking_Config::singleton();
+    $params = array(
+      'option_group_id' => $config->getEarmarkingOptionGroup());
+    try {
+      $optionValues = civicrm_api3('OptionValue', 'Get', $params);
+      foreach($optionValues['values'] as $optionValue) {
+        $earmarkingList[$optionValue['value']] = $optionValue['label'];
       }
-    } else {
-      throw new Exception('Could not find extension Costinvoicelink, check your CiviCRM support team (not found method getOptionGroup)');
+      $earmarkingList[0] = '- select -';
+      asort($earmarkingList);
+      return $earmarkingList;
+    } catch (CiviCRM_API3_Exception $ex) {
+      $earmarkingList[0] = '- select -';
+      return $earmarkingList;
     }
   }
 
