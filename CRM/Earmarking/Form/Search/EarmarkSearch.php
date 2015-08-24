@@ -69,6 +69,7 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
    * @return string, sql
    */
   function all($offset = 0, $rowcount = 0, $sort = NULL, $includeContactIDs = FALSE, $justIDs = FALSE) {
+
     // delegate to $this->sql(), $this->select(), $this->from(), $this->where(), etc.
     return $this->sql($this->select(), $offset, $rowcount, $sort, $includeContactIDs, NULL);
   }
@@ -121,7 +122,7 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
 
     if (!empty($this->_formValues['status_id'])) {
       $count++;
-      $clause[] = "contr.contribution_status_id = %1";
+      $clause[] = "contr.contribution_status_id = %".$count;
       $params[$count] = array($this->_formValues['status_id'], 'Integer');
     }
 
@@ -207,11 +208,12 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
 
     if (!empty($this->_formValues['end_date'])) {
       $count++;
-      $where[] = "(end_date < %".$count." OR end_date IS NULL)";
+      $where[] = "(end_date >= %".$count." OR end_date IS NULL)";
       $params[$count] = array(date('Ymd', strtotime($this->_formValues['end_date'])), 'Date');
     }
     $query = "SELECT COUNT(*)
 FROM civicrm_contribution_recur JOIN civicrm_contribution_recur_offline ON id = recur_id WHERE ".implode(" AND ", $where);
+
     return CRM_COre_DAO::singleValueQuery($query, $params);
   }
   /**
