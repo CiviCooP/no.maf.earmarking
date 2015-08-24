@@ -51,8 +51,8 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
       ts('Contact Id') => 'contact_id',
       ts('Contact Type') => 'contact_type',
       ts('Name') => 'display_name',
-      $config->translate('Earmarking(s)') => 'earmarking',
-      $config->translate('Payment Type(s)') => 'payment_type',
+      $config->translate('Earmarking(s) for Contact') => 'earmarking',
+      $config->translate('Payment Type(s) for Contact') => 'payment_type',
       $config->translate('No of Active Recurring Contr.') => 'contribution_count'
     );
     return $columns;
@@ -180,40 +180,10 @@ LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
 
   private function getRecurringCountForContact($contactId) {
     $contributionCount = 0;
-    $where = array();
-    $where[] = "is_test = %1";
-    $where[] = "contact_id = %2";
-    $params = array(
-      1 => array(0, 'Integer'),
-      2 => array($contactId, 'Integer'));
-    $count = 2;
-
-    if (!empty($this->_formValues['earmarking_id'])) {
-      $count++;
-      $where[] = "earmarking_id = %".$count;
-      $params[$count] = array($this->_formValues['earmarking_id'], 'Integer');
-    }
-
-    if (!empty($this->_formValues['payment_type_id'])) {
-      $count++;
-      $where[] = "payment_type_id = %".$count;
-      $params[$count] = array($this->_formValues['payment_type_id'], 'Integer');
-    }
-
-    if (!empty($this->_formValues['start_date'])) {
-      $count++;
-      $where[] = "start_date <= %".$count;
-      $params[$count] = array(date('Ymd', strtotime($this->_formValues['start_date'])), 'Date');
-    }
-
-    if (!empty($this->_formValues['end_date'])) {
-      $count++;
-      $where[] = "(end_date >= %".$count." OR end_date IS NULL)";
-      $params[$count] = array(date('Ymd', strtotime($this->_formValues['end_date'])), 'Date');
-    }
     $query = "SELECT COUNT(*)
-FROM civicrm_contribution_recur JOIN civicrm_contribution_recur_offline ON id = recur_id WHERE ".implode(" AND ", $where);
-
+FROM civicrm_contribution_recur JOIN civicrm_contribution_recur_offline ON id = recur_id
+WHERE contact_id = %1 AND (end_date >= NOW() OR end_date IS NULL)";
+    $params = array(1 => array($contactId, 'Integer'));
     return CRM_COre_DAO::singleValueQuery($query, $params);
   }
   /**
