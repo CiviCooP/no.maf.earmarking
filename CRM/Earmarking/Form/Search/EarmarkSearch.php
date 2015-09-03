@@ -90,7 +90,7 @@ class CRM_Earmarking_Form_Search_EarmarkSearch extends CRM_Contact_Form_Search_C
    * @return string, sql fragment with SELECT arguments
    */
   function select() {
-    return "DISTINCT(contr.contact_id), contact.contact_type, contact.display_name, '' AS contribution_count,
+    return "DISTINCT(contr.contact_id), contact_a.contact_type, contact_a.display_name, '' AS contribution_count,
     '' AS earmarking, '' AS payment_type ";
   }
 
@@ -106,7 +106,7 @@ FROM civicrm_contribution_recur_offline off
 JOIN civicrm_contribution_recur recur ON off.recur_id = recur.id
 JOIN civicrm_contribution contr ON off.recur_id = contr.contribution_recur_id
 LEFT JOIN ".$transactionTable['table_name']." nets ON contr.id = nets.entity_id
-LEFT JOIN civicrm_contact contact ON contr.contact_id = contact.id";
+LEFT JOIN civicrm_contact contact_a ON contr.contact_id = contact_a.id";
   }
 
   /**
